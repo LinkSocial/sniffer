@@ -12,10 +12,10 @@ typedef struct packet_t {
 
 // Update these with values suitable for your network.
 
-const char* ssid = "jmnt";
-const char* password = "ruralbsi";
+const char* ssid = "Matheus Campos";
+const char* password = "12345678";
 const char* mqtt_server = "192.168.43.137";
-int port = 15672;
+int port = 1883;
 
 WiFiClient espClient;
 PubSubClient client(espClient);
@@ -122,8 +122,14 @@ static void showMetadata(SnifferPacket *snifferPacket) {
   getMAC(snifferPacket->data, 10, countPR);
 
   uint8_t SSID_length = snifferPacket->data[25];
+
+  // Only look for direct probe request
+  if (SSID_length == 0) {
+    return;
+  }
 //  Serial.print("SSID: ");
   printDataSpan(26, SSID_length, snifferPacket->data, countPR);
+
 
   // get timestamp
   buffer[countPR].ts = time(NULL);
