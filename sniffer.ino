@@ -6,15 +6,14 @@
 // definição do tipo dos dados que serão enviados para o broker
 typedef struct packet_t {
   uint8_t mac[6];
-  time_t ts;
   char ssid[21];
 } packet;
 
 // Update these with values suitable for your network.
 
-const char* ssid = "Matheus Campos";
-const char* password = "12345678";
-const char* mqtt_server = "192.168.43.137";
+const char* ssid = "Edna";
+const char* password = "3dn4123@";
+const char* rabbitmq_server = "192.168.0.104";
 int port = 1883;
 
 WiFiClient espClient;
@@ -116,10 +115,18 @@ static void showMetadata(SnifferPacket *snifferPacket) {
       frameSubType != SUBTYPE_PROBE_REQUEST)
         return;
 
-//  Serial.print("RSSI: ");
-//  Serial.print(snifferPacket->rx_ctrl.rssi, DEC);
-
+  delay(10);
   getMAC(snifferPacket->data, 10, countPR);
+
+  int bitLocal = buffer[countPR].mac[0] & 0b00000010;
+  
+  if (bitLocal == 2) {
+    return;
+  }
+
+//  if (bitRead(buffer[countPR].mac[0], 1) == 1) {
+//    return;
+//  }
 
   uint8_t SSID_length = snifferPacket->data[25];
 
@@ -127,12 +134,8 @@ static void showMetadata(SnifferPacket *snifferPacket) {
   if (SSID_length == 0) {
     return;
   }
-//  Serial.print("SSID: ");
+  
   printDataSpan(26, SSID_length, snifferPacket->data, countPR);
-
-
-  // get timestamp
-  buffer[countPR].ts = time(NULL);
 
   Serial.print("Count: ");
   Serial.print(countPR);
@@ -199,21 +202,6 @@ void reconnect() {
   }
 }
 
-void getTime() {
-  // connect into internet in order to get current timestamp
-  setup_wifi();
-  // -3 UTC (Brasília), 0 Day Saving Time (Horário de verão), NTP servers
-  configTime(-3, 0, "0.br.pool.ntp.org", "1.br.pool.ntp.org");
-  Serial.println("Waiting for Internet time");
-
-  while(time(NULL) < 30000) {
-    Serial.print(".");
-    delay(1000);
-  }
-
-  Serial.println("Time response OK");
-}
-
 event config_board_state() {
   // set the WiFi chip to "promiscuous" mode aka monitor mode
   wifi_promiscuous_enable(ENABLE);
@@ -238,7 +226,7 @@ event check_probe_num_state() {
 
 event connect_state() {
   setup_wifi();
-  client.setServer(mqtt_server, port);
+  client.setServer(rabbitmq_server, port);
   client.connect("ESP8266", "psd", "psd");
   delay(10);
   if (client.connected()) {
@@ -253,7 +241,7 @@ event send_data_state() {
     return error;
   } else {
     for (int i = 0; i < BUFFER_LENGTH - 10; i++) {
-      sprintf(payload, "{\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\", \"ssid\":\"%s\", \"ts\":%d}", buffer[i].mac[0], buffer[i].mac[1], buffer[i].mac[2], buffer[i].mac[3], buffer[i].mac[4], buffer[i].mac[5], (char*) buffer[i].ssid, buffer[i].ts);
+      sprintf(payload, "{\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\", \"ssid\":\"%s\"}", buffer[i].mac[0], buffer[i].mac[1], buffer[i].mac[2], buffer[i].mac[3], buffer[i].mac[4], buffer[i].mac[5], (char*) buffer[i].ssid);
       Serial.println(payload);
       client.publish("psd", payload);
     }
@@ -267,8 +255,6 @@ event end_state() {
 
 void setup() {
   Serial.begin(115200);
-  // get and store current timestamp
-  getTime();
 
   // set promiscuous receive callback
   wifi_set_opmode(STATION_MODE);
