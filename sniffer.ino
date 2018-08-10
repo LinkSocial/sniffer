@@ -13,7 +13,7 @@ typedef struct packet_t {
 
 const char* ssid = "Edna";
 const char* password = "3dn4123@";
-const char* rabbitmq_server = "192.168.0.104";
+const char* rabbitmq_server = "192.168.0.108";
 int port = 1883;
 
 WiFiClient espClient;
@@ -40,7 +40,10 @@ extern "C" {
 #define DISABLE 0
 #define ENABLE  1
 
-#define BUFFER_LENGTH 60
+// Will get BUFFER_LENGTH - (BUFFER_SAFE_MARGIN - 1) probe requests
+// due to countPR starts at 0
+#define BUFFER_LENGTH 70
+#define BUFFER_SAFE_MARGIN 21
 
 packet buffer[BUFFER_LENGTH];
 int countPR = 0;
@@ -110,12 +113,14 @@ static void showMetadata(SnifferPacket *snifferPacket) {
   uint8_t toDS         = (frameControl & 0b0000000100000000) >> 8;
   uint8_t fromDS       = (frameControl & 0b0000001000000000) >> 9;
 
+
   // Only look for probe request packets
   if (frameType != TYPE_MANAGEMENT ||
       frameSubType != SUBTYPE_PROBE_REQUEST)
         return;
 
-  delay(10);
+   delay(10);
+
   getMAC(snifferPacket->data, 10, countPR);
 
   int bitLocal = buffer[countPR].mac[0] & 0b00000010;
@@ -137,8 +142,8 @@ static void showMetadata(SnifferPacket *snifferPacket) {
   
   printDataSpan(26, SSID_length, snifferPacket->data, countPR);
 
-  Serial.print("Count: ");
-  Serial.print(countPR);
+  Serial.print("Probe count: ");
+  Serial.print(countPR + 1);
 
   countPR += 1;
 }
@@ -212,8 +217,7 @@ event config_board_state() {
 }
 
 event check_probe_num_state() {  
-  if (countPR > (BUFFER_LENGTH - 11)) {
-    delay(10);
+  if (countPR > (BUFFER_LENGTH - BUFFER_SAFE_MARGIN)) {
     wifi_promiscuous_enable(DISABLE);
     delay(10);
     os_timer_disarm(&channelHop_timer);
@@ -225,6 +229,7 @@ event check_probe_num_state() {
 }
 
 event connect_state() {
+  delay(10);
   setup_wifi();
   client.setServer(rabbitmq_server, port);
   client.connect("ESP8266", "psd", "psd");
@@ -240,7 +245,8 @@ event send_data_state() {
   if (!client.connected()) {
     return error;
   } else {
-    for (int i = 0; i < BUFFER_LENGTH - 10; i++) {
+    for (int i = 0; i < BUFFER_LENGTH - (BUFFER_SAFE_MARGIN - 1); i++) {
+      delay(10);
       sprintf(payload, "{\"mac\":\"%02x:%02x:%02x:%02x:%02x:%02x\", \"ssid\":\"%s\"}", buffer[i].mac[0], buffer[i].mac[1], buffer[i].mac[2], buffer[i].mac[3], buffer[i].mac[4], buffer[i].mac[5], (char*) buffer[i].ssid);
       Serial.println(payload);
       client.publish("psd", payload);
